@@ -31,12 +31,31 @@
 			disablekb: 1,      // Disable keyboard shortcuts
 			enablejsapi: 1,    // Enable JS API for custom controls
 			muted: 1,		   // Set to play muted
-			cc_load_policy: 0, // Do not display subtitles automatically
+			cc_load_policy: 1, // Show subtitles (fork: Korean captions on by default; overridden below)
 			iv_load_policy: 3, // Do not display video annotations
 			autoplay: 1		   // Set to make it autostart
 		};
 
 		const startPaused = getParameter('paused') === '1';
+
+		// ─── Korean subtitles (fork addition) ──────────────────────────────────────
+		// Default: Korean captions ON. Override with ?cc=<lang> (e.g. ?cc=en),
+		// or ?cc=off to disable. Only safe language codes are accepted.
+		const ccRaw = getParameter('cc');
+		if (ccRaw === 'off') {
+			defaultPlayerVars.cc_load_policy = 0;
+			delete defaultPlayerVars.cc_lang_pref;
+		} else {
+			const ccLang = (ccRaw && /^[a-zA-Z]{2,3}(-[a-zA-Z]{2,4})?$/.test(ccRaw)) ? ccRaw : 'ko';
+			defaultPlayerVars.cc_load_policy = 1;   // force captions on
+			defaultPlayerVars.cc_lang_pref = ccLang; // prefer this caption language
+		}
+
+		// Preferred audio track language (?audio=<lang>, e.g. ja for anime dubs).
+		const audioRaw = getParameter('audio');
+		if (audioRaw && /^[a-zA-Z]{2,3}(-[a-zA-Z]{2,4})?$/.test(audioRaw)) {
+			defaultPlayerVars.audio_lang_pref = audioRaw;
+		}
 
 		function onYouTubeIframeAPIReady() {
 			const rawVid = getParameter('v');

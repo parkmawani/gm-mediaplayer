@@ -143,6 +143,41 @@ end
 -- }
 
 -- ─────────────────────────────────────────────
+-- YouTube language options (caption / audio)
+-- 코드, 표시이름. 필요하면 자유롭게 추가/삭제.
+-- ─────────────────────────────────────────────
+
+local CAPTION_LANGS = {
+	{ "off",   "Off / 자막 끄기" },
+	{ "ko",    "한국어" },
+	{ "en",    "English" },
+	{ "ja",    "日本語" },
+	{ "zh-CN", "简体中文" },
+	{ "zh-TW", "繁體中文" },
+	{ "es-ES", "Español" },
+	{ "fr",    "Français" },
+	{ "de",    "Deutsch" },
+	{ "ru",    "Русский" },
+	{ "pt-BR", "Português" },
+	{ "it",    "Italiano" },
+	{ "id",    "Bahasa Indonesia" },
+	{ "th",    "ไทย" },
+	{ "vi",    "Tiếng Việt" },
+	{ "ar",    "العربية" },
+}
+
+local AUDIO_LANGS = {
+	{ "",   "Default / 기본" },
+	{ "ja", "日本語" },
+	{ "en", "English" },
+	{ "ko", "한국어" },
+	{ "es", "Español" },
+	{ "fr", "Français" },
+	{ "de", "Deutsch" },
+	{ "zh", "中文" },
+}
+
+-- ─────────────────────────────────────────────
 -- Control factory functions
 -- ─────────────────────────────────────────────
 
@@ -201,6 +236,37 @@ local function CreateDisabledDropdown(parent, text, options)
 	end
 	combo:SetEnabled(false)
 	combo.OnSelect = function() combo:SetValue(options[1] or "Off") end
+
+	return combo
+end
+
+-- 언어 선택 드롭다운 (cvar 에 언어 코드를 저장). list = { {code, 표시이름}, ... }
+local function CreateLangDropdown(parent, labelText, convarName, list)
+	local label = vgui.Create("DLabel", parent)
+	label:SetText(labelText)
+	label:SetFont("DermaDefaultBold")
+	label:SetTextColor(Color(220, 220, 220))
+	label:Dock(TOP)
+	label:DockMargin(0, 15, 0, 5)
+	label:SizeToContents()
+
+	local combo = vgui.Create("DComboBox", parent)
+	combo:SetTall(25)
+	combo:Dock(TOP)
+	combo:DockMargin(0, 0, 0, 0)
+	combo:SetSortItems(false)
+
+	local convar = GetConVar(convarName)
+	local cur = convar and convar:GetString() or ""
+	for _, pair in ipairs(list) do
+		combo:AddChoice(pair[2], pair[1], cur == pair[1])
+	end
+	-- 현재 값이 목록에 없으면 첫 항목 표시
+	if not combo:GetSelected() then combo:SetValue(list[1][2]) end
+
+	combo.OnSelect = function(_, _, _, code)
+		RunConsoleCommand(convarName, code or "")
+	end
 
 	return combo
 end
@@ -278,14 +344,10 @@ function PANEL:BuildContent()
 	-- Set initial state
 	UpdateProximityControlsEnabled()
 
-	-- Subtitles (placeholder)
-	-- CreateDisabledDropdown(scroll, L("mp.settings.subtitles"), {
-	-- 	L("mp.settings.subtitles_off"),
-	-- 	"English",
-	-- 	"German",
-	-- 	"Japanese",
-	-- 	"Klingon",
-	-- })
+	-- YouTube language (per-viewer). Each person picks their own subtitle /
+	-- audio language; it is sent to their own player page.
+	CreateLangDropdown(scroll, "Subtitles / 자막 언어", "mediaplayer_cc_lang", CAPTION_LANGS)
+	CreateLangDropdown(scroll, "Audio track / 음성 언어", "mediaplayer_audio_lang", AUDIO_LANGS)
 end
 
 function PANEL:Paint(w, h)

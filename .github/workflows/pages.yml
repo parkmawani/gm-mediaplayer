@@ -1,0 +1,41 @@
+name: Deploy player page to GitHub Pages
+
+# public/ 폴더(유튜브 플레이어 HTML/JS)를 GitHub Pages 로 자동 배포.
+# master 에 푸시할 때마다 실행됨. (저장소 Settings > Pages > Source 를
+#  "GitHub Actions" 로 한 번만 바꿔주면 됨)
+
+on:
+  push:
+    branches: [ master ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload public/ as the site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./public
+
+      - name: Deploy to Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

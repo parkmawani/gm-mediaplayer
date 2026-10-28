@@ -62,6 +62,21 @@ function SERVICE:OnBrowserReady( browser )
 		hash = hash .. ("&t=%d"):format(curTime)
 	end
 
+	-- Per-viewer language preferences (caption / audio). Sanitize to safe
+	-- language-code characters before putting them in the URL.
+	local function sanitizeLang( s )
+		return ( tostring( s or "" ):gsub( "[^%a%-]", "" ) )
+	end
+
+	local ccLang = MediaPlayer.Cvars.CaptionLang and sanitizeLang( MediaPlayer.Cvars.CaptionLang:GetString() ) or "ko"
+	if ccLang == "" then ccLang = "ko" end
+	hash = hash .. "&cc=" .. ccLang   -- "off" disables captions on the player page
+
+	local audioLang = MediaPlayer.Cvars.AudioLang and sanitizeLang( MediaPlayer.Cvars.AudioLang:GetString() ) or ""
+	if audioLang ~= "" then
+		hash = hash .. "&audio=" .. audioLang
+	end
+
 	local url = baseUrl .. "#" .. hash
 	browser:OpenURL( url )
 

@@ -1,0 +1,255 @@
+diff --git a/.github/workflows/pages.yml b/.github/workflows/pages.yml
+new file mode 100644
+index 0000000..9466aaa
+--- /dev/null
++++ b/.github/workflows/pages.yml
+@@ -0,0 +1,41 @@
++name: Deploy player page to GitHub Pages
++
++# public/ 폴더(유튜브 플레이어 HTML/JS)를 GitHub Pages 로 자동 배포.
++# master 에 푸시할 때마다 실행됨. (저장소 Settings > Pages > Source 를
++#  "GitHub Actions" 로 한 번만 바꿔주면 됨)
++
++on:
++  push:
++    branches: [ master ]
++  workflow_dispatch:
++
++permissions:
++  contents: read
++  pages: write
++  id-token: write
++
++concurrency:
++  group: pages
++  cancel-in-progress: true
++
++jobs:
++  deploy:
++    environment:
++      name: github-pages
++      url: ${{ steps.deployment.outputs.page_url }}
++    runs-on: ubuntu-latest
++    steps:
++      - name: Checkout
++        uses: actions/checkout@v4
++
++      - name: Configure Pages
++        uses: actions/configure-pages@v5
++
++      - name: Upload public/ as the site
++        uses: actions/upload-pages-artifact@v3
++        with:
++          path: ./public
++
++      - name: Deploy to Pages
++        id: deployment
++        uses: actions/deploy-pages@v4
+diff --git a/lua/mediaplayer/config/client.lua b/lua/mediaplayer/config/client.lua
+index df0996c..6b645ae 100644
+--- a/lua/mediaplayer/config/client.lua
++++ b/lua/mediaplayer/config/client.lua
+@@ -10,7 +10,12 @@ Special note to workshop uploaders: Adding more media players to the workshop wi
+ 	Everyone is welcome to participate in this PurrCoding fork instead.
+ ]]--
+ 
+-local baseUrl = "https://gm-mediaplayer.purrcoding.com/"
++-- ⚠ 한글 자막(Korean captions) 포크:
++--   자막을 켜려면 수정된 public/ 폴더를 네가 직접 호스팅하고 아래 주소를 그걸로 바꿔야 함.
++--   (이 주소를 PurrCoding 원본으로 두면 원본 HTML 이 로드돼서 자막이 안 나옴)
++--   GitHub Pages 예: https://<깃허브아이디>.github.io/<저장소이름>/
++--   끝에 반드시 슬래시(/) 포함.
++local baseUrl = "https://parkmawani.github.io/gm-mediaplayer-kor-cap/"
+ 
+ MediaPlayer.SetConfig({
+ 
+diff --git a/lua/mediaplayer/services/youtube/cl_init.lua b/lua/mediaplayer/services/youtube/cl_init.lua
+index 4447ce2..d694624 100644
+--- a/lua/mediaplayer/services/youtube/cl_init.lua
++++ b/lua/mediaplayer/services/youtube/cl_init.lua
+@@ -62,6 +62,21 @@ function SERVICE:OnBrowserReady( browser )
+ 		hash = hash .. ("&t=%d"):format(curTime)
+ 	end
+ 
++	-- Per-viewer language preferences (caption / audio). Sanitize to safe
++	-- language-code characters before putting them in the URL.
++	local function sanitizeLang( s )
++		return ( tostring( s or "" ):gsub( "[^%a%-]", "" ) )
++	end
++
++	local ccLang = MediaPlayer.Cvars.CaptionLang and sanitizeLang( MediaPlayer.Cvars.CaptionLang:GetString() ) or "ko"
++	if ccLang == "" then ccLang = "ko" end
++	hash = hash .. "&cc=" .. ccLang   -- "off" disables captions on the player page
++
++	local audioLang = MediaPlayer.Cvars.AudioLang and sanitizeLang( MediaPlayer.Cvars.AudioLang:GetString() ) or ""
++	if audioLang ~= "" then
++		hash = hash .. "&audio=" .. audioLang
++	end
++
+ 	local url = baseUrl .. "#" .. hash
+ 	browser:OpenURL( url )
+ 
+diff --git a/lua/mediaplayer/sh_cvars.lua b/lua/mediaplayer/sh_cvars.lua
+index 60da074..ff2d812 100644
+--- a/lua/mediaplayer/sh_cvars.lua
++++ b/lua/mediaplayer/sh_cvars.lua
+@@ -29,4 +29,10 @@ if CLIENT then
+ 	MediaPlayer.Cvars.ProximityMin = CreateClientConVar( "mediaplayer_proximity_min", "100", true, false )
+ 	MediaPlayer.Cvars.ProximityMax = CreateClientConVar( "mediaplayer_proximity_max", "1000", true, false )
+ 
++	-- Per-viewer YouTube language preferences (passed to the player page).
++	-- Caption language code (e.g. "ko", "en", "ja"); "off" disables captions.
++	MediaPlayer.Cvars.CaptionLang	= CreateClientConVar( "mediaplayer_cc_lang", "ko", true, false )
++	-- Preferred audio track language (e.g. "ja"); empty = no preference.
++	MediaPlayer.Cvars.AudioLang		= CreateClientConVar( "mediaplayer_audio_lang", "", true, false )
++
+ end
+\ No newline at end of file
+diff --git a/lua/mp_menu/settings.lua b/lua/mp_menu/settings.lua
+index b83039e..438063d 100644
+--- a/lua/mp_menu/settings.lua
++++ b/lua/mp_menu/settings.lua
+@@ -142,6 +142,41 @@ end
+ -- 	["tlh"]   = "Klingon (tlhIngan Hol)",
+ -- }
+ 
++-- ─────────────────────────────────────────────
++-- YouTube language options (caption / audio)
++-- 코드, 표시이름. 필요하면 자유롭게 추가/삭제.
++-- ─────────────────────────────────────────────
++
++local CAPTION_LANGS = {
++	{ "off",   "Off / 자막 끄기" },
++	{ "ko",    "한국어" },
++	{ "en",    "English" },
++	{ "ja",    "日本語" },
++	{ "zh-CN", "简体中文" },
++	{ "zh-TW", "繁體中文" },
++	{ "es-ES", "Español" },
++	{ "fr",    "Français" },
++	{ "de",    "Deutsch" },
++	{ "ru",    "Русский" },
++	{ "pt-BR", "Português" },
++	{ "it",    "Italiano" },
++	{ "id",    "Bahasa Indonesia" },
++	{ "th",    "ไทย" },
++	{ "vi",    "Tiếng Việt" },
++	{ "ar",    "العربية" },
++}
++
++local AUDIO_LANGS = {
++	{ "",   "Default / 기본" },
++	{ "ja", "日本語" },
++	{ "en", "English" },
++	{ "ko", "한국어" },
++	{ "es", "Español" },
++	{ "fr", "Français" },
++	{ "de", "Deutsch" },
++	{ "zh", "中文" },
++}
++
+ -- ─────────────────────────────────────────────
+ -- Control factory functions
+ -- ─────────────────────────────────────────────
+@@ -205,6 +240,37 @@ local function CreateDisabledDropdown(parent, text, options)
+ 	return combo
+ end
+ 
++-- 언어 선택 드롭다운 (cvar 에 언어 코드를 저장). list = { {code, 표시이름}, ... }
++local function CreateLangDropdown(parent, labelText, convarName, list)
++	local label = vgui.Create("DLabel", parent)
++	label:SetText(labelText)
++	label:SetFont("DermaDefaultBold")
++	label:SetTextColor(Color(220, 220, 220))
++	label:Dock(TOP)
++	label:DockMargin(0, 15, 0, 5)
++	label:SizeToContents()
++
++	local combo = vgui.Create("DComboBox", parent)
++	combo:SetTall(25)
++	combo:Dock(TOP)
++	combo:DockMargin(0, 0, 0, 0)
++	combo:SetSortItems(false)
++
++	local convar = GetConVar(convarName)
++	local cur = convar and convar:GetString() or ""
++	for _, pair in ipairs(list) do
++		combo:AddChoice(pair[2], pair[1], cur == pair[1])
++	end
++	-- 현재 값이 목록에 없으면 첫 항목 표시
++	if not combo:GetSelected() then combo:SetValue(list[1][2]) end
++
++	combo.OnSelect = function(_, _, _, code)
++		RunConsoleCommand(convarName, code or "")
++	end
++
++	return combo
++end
++
+ -- ─────────────────────────────────────────────
+ -- Settings tab panel
+ -- ─────────────────────────────────────────────
+@@ -278,14 +344,10 @@ function PANEL:BuildContent()
+ 	-- Set initial state
+ 	UpdateProximityControlsEnabled()
+ 
+-	-- Subtitles (placeholder)
+-	-- CreateDisabledDropdown(scroll, L("mp.settings.subtitles"), {
+-	-- 	L("mp.settings.subtitles_off"),
+-	-- 	"English",
+-	-- 	"German",
+-	-- 	"Japanese",
+-	-- 	"Klingon",
+-	-- })
++	-- YouTube language (per-viewer). Each person picks their own subtitle /
++	-- audio language; it is sent to their own player page.
++	CreateLangDropdown(scroll, "Subtitles / 자막 언어", "mediaplayer_cc_lang", CAPTION_LANGS)
++	CreateLangDropdown(scroll, "Audio track / 음성 언어", "mediaplayer_audio_lang", AUDIO_LANGS)
+ end
+ 
+ function PANEL:Paint(w, h)
+diff --git a/public/CNAME b/public/CNAME
+deleted file mode 100644
+index 75182d8..0000000
+--- a/public/CNAME
++++ /dev/null
+@@ -1 +0,0 @@
+-gm-mediaplayer.purrcoding.com
+diff --git a/public/scripts/youtube.js b/public/scripts/youtube.js
+index 7f2f0b1..4363b4f 100644
+--- a/public/scripts/youtube.js
++++ b/public/scripts/youtube.js
+@@ -31,13 +31,32 @@
+ 			disablekb: 1,      // Disable keyboard shortcuts
+ 			enablejsapi: 1,    // Enable JS API for custom controls
+ 			muted: 1,		   // Set to play muted
+-			cc_load_policy: 0, // Do not display subtitles automatically
++			cc_load_policy: 1, // Show subtitles (fork: Korean captions on by default; overridden below)
+ 			iv_load_policy: 3, // Do not display video annotations
+ 			autoplay: 1		   // Set to make it autostart
+ 		};
+ 
+ 		const startPaused = getParameter('paused') === '1';
+ 
++		// ─── Korean subtitles (fork addition) ──────────────────────────────────────
++		// Default: Korean captions ON. Override with ?cc=<lang> (e.g. ?cc=en),
++		// or ?cc=off to disable. Only safe language codes are accepted.
++		const ccRaw = getParameter('cc');
++		if (ccRaw === 'off') {
++			defaultPlayerVars.cc_load_policy = 0;
++			delete defaultPlayerVars.cc_lang_pref;
++		} else {
++			const ccLang = (ccRaw && /^[a-zA-Z]{2,3}(-[a-zA-Z]{2,4})?$/.test(ccRaw)) ? ccRaw : 'ko';
++			defaultPlayerVars.cc_load_policy = 1;   // force captions on
++			defaultPlayerVars.cc_lang_pref = ccLang; // prefer this caption language
++		}
++
++		// Preferred audio track language (?audio=<lang>, e.g. ja for anime dubs).
++		const audioRaw = getParameter('audio');
++		if (audioRaw && /^[a-zA-Z]{2,3}(-[a-zA-Z]{2,4})?$/.test(audioRaw)) {
++			defaultPlayerVars.audio_lang_pref = audioRaw;
++		}
++
+ 		function onYouTubeIframeAPIReady() {
+ 			const rawVid = getParameter('v');
+ 			const vid = (rawVid && /^[a-zA-Z0-9_-]{11}$/.test(rawVid))
