@@ -15,7 +15,7 @@ Special note to workshop uploaders: Adding more media players to the workshop wi
 --   (이 주소를 PurrCoding 원본으로 두면 원본 HTML 이 로드돼서 자막이 안 나옴)
 --   GitHub Pages 예: https://<깃허브아이디>.github.io/<저장소이름>/
 --   끝에 반드시 슬래시(/) 포함.
-local baseUrl = "https://parkmawani.github.io/gm-mediaplayer"
+local baseUrl = "https://parkmawani.github.io/gm-mediaplayer/"
 
 MediaPlayer.SetConfig({
 
