@@ -42,11 +42,15 @@
 		// Default: Korean captions ON. Override with ?cc=<lang> (e.g. ?cc=en),
 		// or ?cc=off to disable. Only safe language codes are accepted.
 		const ccRaw = getParameter('cc');
+		let captionsOn = false;
+		let ccLang = 'ko';
 		if (ccRaw === 'off') {
+			captionsOn = false;
 			defaultPlayerVars.cc_load_policy = 0;
 			delete defaultPlayerVars.cc_lang_pref;
 		} else {
-			const ccLang = (ccRaw && /^[a-zA-Z]{2,3}(-[a-zA-Z]{2,4})?$/.test(ccRaw)) ? ccRaw : 'ko';
+			captionsOn = true;
+			ccLang = (ccRaw && /^[a-zA-Z]{2,3}(-[a-zA-Z]{2,4})?$/.test(ccRaw)) ? ccRaw : 'ko';
 			defaultPlayerVars.cc_load_policy = 1;   // force captions on
 			defaultPlayerVars.cc_lang_pref = ccLang; // prefer this caption language
 		}
@@ -55,6 +59,18 @@
 		const audioRaw = getParameter('audio');
 		if (audioRaw && /^[a-zA-Z]{2,3}(-[a-zA-Z]{2,4})?$/.test(audioRaw)) {
 			defaultPlayerVars.audio_lang_pref = audioRaw;
+		}
+
+		// Force captions ON in the chosen language. The base player actively
+		// unloads the captions module (see onStateChange/onApiChange), so when
+		// the viewer wants subtitles we must (re)load it and set the track.
+		function applyCaptions(p) {
+			if (!captionsOn) return;
+			try { p.loadModule('captions'); } catch (e) {}
+			try { p.loadModule('cc'); } catch (e) {}
+			try { p.setOption('captions', 'reload', true); } catch (e) {}
+			try { p.setOption('captions', 'track', { languageCode: ccLang }); } catch (e) {}
+			try { p.setOption('cc', 'track', { languageCode: ccLang }); } catch (e) {}
 		}
 
 		function onYouTubeIframeAPIReady() {
@@ -107,6 +123,9 @@
 
 						window.MediaPlayer = wrapper;
 
+						// Turn captions on (if the viewer wants them)
+						applyCaptions(player);
+
 						// Signal Lua that the player is ready for volume
 						console.log("READY:");
 					},
@@ -118,21 +137,29 @@
 							wrapper._paused = true;
 						}
 
-						// YouTube re-loads the captions module when playback actually
-						// begins, so unload it again on PLAYING/BUFFERING to keep subtitles off.
+						// Captions get reset when playback begins. Re-apply the
+						// viewer's choice on PLAYING/BUFFERING: load+select when they
+						// want subtitles, unload when they don't.
 						if (e.data === YT.PlayerState.PLAYING ||
 							e.data === YT.PlayerState.BUFFERING) {
-							player.unloadModule('captions');
+							if (captionsOn) {
+								applyCaptions(player);
+							} else {
+								player.unloadModule('captions');
+							}
 						}
 					},
 					onApiChange: () => {
-						// Captions module has (re)loaded — force it off. Cover both
-						// module name variants and clear any active track, since
-						// unloadModule alone is unreliable across player builds.
-						try { player.unloadModule('captions'); } catch (e) {}
-						try { player.unloadModule('cc'); } catch (e) {}
-						try { player.setOption('captions', 'track', {}); } catch (e) {}
-						try { player.setOption('cc', 'track', {}); } catch (e) {}
+						// The captions module (re)loaded. Apply the viewer's choice:
+						// select their language, or force it off when disabled.
+						if (captionsOn) {
+							applyCaptions(player);
+						} else {
+							try { player.unloadModule('captions'); } catch (e) {}
+							try { player.unloadModule('cc'); } catch (e) {}
+							try { player.setOption('captions', 'track', {}); } catch (e) {}
+							try { player.setOption('cc', 'track', {}); } catch (e) {}
+						}
 					},
 				}
 			});
